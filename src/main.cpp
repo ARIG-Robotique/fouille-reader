@@ -20,20 +20,22 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
-void printCarreFouille(int value, String name) {
-#if defined(SCREEN)
-  display.clearDisplay();
+// Private variables //
+// ----------------- //
+int lastAnalogValue = 0;
+int analogValue = 0;
+int cpt = 0;
+CRGB leds[NUM_LEDS];
 
-  display.setTextSize(2);             // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
-  display.println(name);
-  display.println(value, DEC);
-
-  display.display();
+// Prototypes for functions defined at the end of this file //
+// -------------------------------------------------------- //
+#if defined(SCREEN) 
+void printCarreFouilleScreen(int value, String name);
 #endif
-}
+boolean between(int value, int medium);
 
+// Configuration //
+// ------------- //
 void setup()
 {
 #ifdef DEBUG
@@ -64,41 +66,73 @@ void setup()
 
 }
 
-boolean between(int value, int medium) {
-  return (value >= medium - 10 && value <= medium + 10);
-}
-
-int lastValue = 0;
-int value = 0;
-int cpt = 0;
-
+// Main loop //
+// --------- //
 void loop() {
-  value = analogRead(A0);
-  int diff = abs(value - lastValue);
-  Serial.print("Value : "); Serial.print(value, DEC); 
+  analogValue = analogRead(A0);
+  int diff = abs(analogValue - lastAnalogValue);
+#if defined(DEBUG)
+  Serial.print("Value : "); Serial.print(analogValue, DEC); 
   Serial.print("\tDiff  : "); Serial.println(diff, DEC);
+#endif
 
   if (diff < 5) {
     cpt++;
   } else {
     cpt = 0;
   }
-  lastValue = value;
+  lastAnalogValue = analogValue;
 
   if (cpt > 3) {
     cpt = 3;
-    if (between(value, 327)) {
-      printCarreFouille(value, "VIOLET");
-    } else if (between(value, 511)) {
-      printCarreFouille(value, "JAUNE");
-    } else if (between(value, 843)) {
-      printCarreFouille(value, "INTERDIT");
+    if (between(analogValue, 327)) {
+#if defined(SCREEN)      
+      printCarreFouilleScreen(analogValue, "VIOLET");
+#endif
+      leds[0] = CRGB::Purple;
+    
+    } else if (between(analogValue, 511)) {
+#if defined(SCREEN)       
+      printCarreFouilleScreen(analogValue, "JAUNE");
+#endif      
+      leds[0] = CRGB::Yellow;
+    
+    } else if (between(analogValue, 843)) {
+#if defined(SCREEN)     
+      printCarreFouilleScreen(analogValue, "INTERDIT");
+#endif
+      leds[0] = CRGB::Red;
+    
     } else {
-      printCarreFouille(value, "INCONNU");
+#if defined(SCREEN)       
+      printCarreFouilleScreen(analogValue, "INCONNU");
+#endif
     }
+  
   } else {
-    printCarreFouille(value, "EN L'AIR");
+#if defined(SCREEN) 
+    printCarreFouilleScreen(analogValue, "EN L'AIR");
+#endif    
   }
 
-  delay(2);
+  FastLED.show();
+  FastLED.delay(2);
+}
+
+#if defined(SCREEN)
+void printCarreFouilleScreen(int value, String name) {
+  display.clearDisplay();
+
+  display.setTextSize(2);             // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
+  display.println(name);
+  display.println(value, DEC);
+
+  display.display();
+}
+#endif
+
+boolean between(int value, int medium) {
+  return (value >= medium - 10 && value <= medium + 10);
 }
