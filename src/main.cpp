@@ -20,11 +20,20 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
+enum CarreFouille {
+  EN_L_AIR,
+  INCONNU,
+  JAUNE,
+  VIOLET,
+  INTERDIT
+};
+
 // Private variables //
 // ----------------- //
 int lastAnalogValue = 0;
 int analogValue = 0;
 int cpt = 0;
+volatile CarreFouille carreFouille = EN_L_AIR;
 CRGB leds[NUM_LEDS];
 
 // Prototypes for functions defined at the end of this file //
@@ -32,6 +41,7 @@ CRGB leds[NUM_LEDS];
 #if defined(SCREEN) 
 void printCarreFouilleScreen(int value, String name);
 #endif
+void i2cRequest();
 boolean between(int value, int medium);
 
 // Configuration //
@@ -64,6 +74,15 @@ void setup()
   display.clearDisplay();
 #endif
 
+  
+  Wire.begin(0xC0);
+  Wire.onRequest(i2cRequest);
+#if defined(DEBUG)
+  Serial.print(" - I2C [OK] (Addresse : ");
+  Serial.print(i2cAddress, HEX);
+  Serial.println(")");
+#endif
+
 }
 
 // Main loop //
@@ -89,34 +108,44 @@ void loop() {
 #if defined(SCREEN)      
       printCarreFouilleScreen(analogValue, "VIOLET");
 #endif
+      carreFouille = VIOLET;
       leds[0] = CRGB::Purple;
     
     } else if (between(analogValue, 511)) {
 #if defined(SCREEN)       
       printCarreFouilleScreen(analogValue, "JAUNE");
-#endif      
+#endif     
+      carreFouille = JAUNE;
       leds[0] = CRGB::Yellow;
     
     } else if (between(analogValue, 843)) {
 #if defined(SCREEN)     
       printCarreFouilleScreen(analogValue, "INTERDIT");
 #endif
+      carreFouille = INTERDIT;
       leds[0] = CRGB::Red;
     
     } else {
 #if defined(SCREEN)       
       printCarreFouilleScreen(analogValue, "INCONNU");
 #endif
+      carreFouille = INCONNU;
+      leds[0] = CRGB::Blue;
     }
   
   } else {
 #if defined(SCREEN) 
     printCarreFouilleScreen(analogValue, "EN L'AIR");
-#endif    
+#endif
+    carreFouille = EN_L_AIR;
+    leds[0] = CRGB::Blue;
   }
 
   FastLED.show();
   FastLED.delay(2);
+
+void i2cRequest() {
+  Wire.write(carreFouille);
 }
 
 #if defined(SCREEN)
