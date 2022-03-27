@@ -38,6 +38,7 @@ int cpt = 0;
 
 volatile CarreFouille carreFouille = EN_L_AIR;
 
+uint8_t brightness = 250;
 CRGB leds[NUM_LEDS];
 
 // Prototypes for functions defined at the end of this file //
@@ -95,6 +96,12 @@ void setup()
   Serial.print(i2cAddress, HEX);
   Serial.println(")");
 #endif
+
+#if defined(DEBUG)
+  Serial.println(" - Configuration bandeau LEDs");
+#endif
+  FastLED.addLeds<NEOPIXEL, 6>(leds, NUM_LEDS);
+  FastLED.setBrightness(brightness);
 
 }
 
