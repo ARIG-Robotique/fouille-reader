@@ -2,12 +2,13 @@
 //#define SCREEN
 
 #include <Arduino.h>
+#include <FastLED.h>
+#include <Wire.h>
+
 #if defined(SCREEN)
   #include <Adafruit_GFX.h>
   #include <Adafruit_SSD1306.h>
 #endif
-#include <FastLED.h>
-#include <Wire.h>
 
 #if defined(SCREEN)
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
@@ -16,6 +17,31 @@
 #define OLED_RESET     4 // Reset pin # (or -1 if sharing Arduino reset pin)
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#endif
+
+#define NUM_LEDS_FOUILLE 1
+#define NUM_LEDS_VENTOUSE 2
+#define NUM_LEDS_STOCK 6
+
+#define NB_BANDEAU_LED 1 // nombre de groupes de led 1, 2 ou 3
+
+#if NB_BANDEAU_LED == 1
+#define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE + NUM_LEDS_VENTOUSE + NUM_LEDS_STOCK)
+#elif NB_BANDEAU_LED == 2
+#define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE)
+#define NUM_LEDS_BANDEAU_2 (NUM_LEDS_VENTOUSE + NUM_LEDS_STOCK)
+#elif NB_BANDEAU_LED == 3
+#define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE)
+#define NUM_LEDS_BANDEAU_2 (NUM_LEDS_VENTOUSE)
+#define NUM_LEDS_BANDEAU_3 (NUM_LEDS_STOCK)
+#endif
+
+CRGB ledsBandeau1[NUM_LEDS_BANDEAU_1];
+#if NB_BANDEAU_LED > 1
+CRGB ledsBandeau2[NUM_LEDS_BANDEAU_2];
+#endif
+#if NB_BANDEAU_LED > 2
+CRGB ledsBandeau3[NUM_LEDS_BANDEAU_3];
 #endif
 
 enum CarreFouille : byte {
@@ -32,20 +58,20 @@ int i2cAddress = 0x3C;
 
 volatile CarreFouille carreFouille = EN_L_AIR;
 
-CRGB leds[3];
-CRGB ledsStock[6];
-
 // Prototypes for functions defined at the end of this file //
 // -------------------------------------------------------- //
-#if defined(DEBUG)
-void printCarreFouilleDebug(CarreFouille carreFouille);
-#endif
 #if defined(SCREEN) 
-void printCarreFouilleScreen(int value, String name);
+void printStatesScreen(int value, String name);
 #endif
-void i2cRequest(int length);
+void i2cOnReceive(int length);
+void processReceive(int length, boolean wire);
+
 void readCarreFouille();
 boolean between(int value, int medium);
+
+void couleurCarreFouille(CRGB couleur);
+void couleurStock(uint8_t index, CRGB couleur);
+void couleurVentouse(uint8_t index, CRGB couleur);
 
 // Configuration //
 // ------------- //
@@ -85,18 +111,23 @@ void setup()
 
   
   Wire.begin(i2cAddress);
-  Wire.onReceive(i2cRequest);
+  Wire.onReceive(i2cOnReceive);
 #if defined(DEBUG)
   Serial.print(" - I2C [OK] (Addresse : ");
   Serial.print(i2cAddress, HEX);
   Serial.println(")");
+
+  Serial.print(" - Configuration bandeau(x) LEDs : ");
+  Serial.println(NB_BANDEAU_LED);
 #endif
 
-#if defined(DEBUG)
-  Serial.println(" - Configuration bandeau LEDs");
+  FastLED.addLeds<NEOPIXEL, 6>(ledsBandeau1, NUM_LEDS_BANDEAU_1);
+#if NB_BANDEAU_LED > 1
+  FastLED.addLeds<NEOPIXEL, 5>(ledsBandeau2, NUM_LEDS_BANDEAU_2);
 #endif
-  FastLED.addLeds<NEOPIXEL, 6>(leds, 3);
-  FastLED.addLeds<NEOPIXEL, 5>(ledsStock, 6); // FIXME pin
+#if NB_BANDEAU_LED > 2
+  FastLED.addLeds<NEOPIXEL, 3>(ledsBandeau3, NUM_LEDS_BANDEAU_3);
+#endif
 }
 
 // Main loop //
@@ -108,76 +139,85 @@ void loop() {
 
   EVERY_N_SECONDS(1) {
     digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN) == LOW ? HIGH : LOW);
+  }
 
 #if defined(DEBUG)
-    Serial.print("Value : "); Serial.print(analogValue, DEC); 
-    Serial.print("\tDiff  : "); Serial.println(diff, DEC);
-    printCarreFouilleDebug(carreFouille);
-#endif
+  if (Serial.available()) {
+    processReceive(7, false);
   }
+#endif
 
   FastLED.show();
 }
 
-void i2cRequest(int length) {
-  char c = Wire.read();
+void i2cOnReceive(int length) {
+  processReceive(length, true);
+}
 
+void processReceive(int length, boolean wire) {
+  char c = wire ? Wire.read() : Serial.read();
   switch (c) {
     // demande de valeur du carré de fouille
     case 'F':
-      Wire.write(carreFouille);
+      if (wire) {
+        Wire.write(carreFouille);
+      } else {
+        Serial.print("F: 0x0");
+        Serial.println(carreFouille, HEX);
+      }
       break;
 
     // changement de couleur du stock
     case 'S':
       if (length < 7) {
-        #if defined(DEBUG)
+#if defined(DEBUG)
         Serial.print("Pas assez de bits reçus pour le stock");
-        #endif
+#endif
         break;
       }
       for (uint8_t i = 0; i < 6; i++) {
-        c = Wire.read();
+        c = wire ? Wire.read() : Serial.read();
         switch (c) {
-          case 'R': ledsStock[i] = CRGB::Red; break;
-          case 'G': ledsStock[i] = CRGB::Green; break;
-          case 'B': ledsStock[i] = CRGB::Blue; break;
-          case '?': ledsStock[i] = CRGB::Brown; break;
-          default: ledsStock[i] = CRGB::Black; break;
+          case 'R': couleurStock(i, CRGB::Red); break;
+          case 'G': couleurStock(i, CRGB::Green); break;
+          case 'B': couleurStock(i, CRGB::Blue); break;
+          case '?': couleurStock(i, CRGB::Yellow); break;
+          default: couleurStock(i, CRGB::Black); break;
         }
       }
-      Wire.write(0);
+      if (wire) {
+        Wire.write(0);
+      } else {
+        Serial.println("S: OK");
+      }
       break;
 
-    // changement de couleur des ventouse
+    // Changement de couleur des ventouses
     case 'V':
       if (length < 3) {
-        #if defined(DEBUG)
+#if defined(DEBUG)
         Serial.print("Pas assez de bits reçus pour les ventouses");
-        #endif
+#endif
         break;
       }
       for (uint8_t i = 0; i < 2; i++) {
-        c = Wire.read();
+        c = wire ? Wire.read() : Serial.read();
         switch (c) {
-          case 'R': leds[i+1] = CRGB::Red; break;
-          case 'G': leds[i+1] = CRGB::Green; break;
-          case 'B': leds[i+1] = CRGB::Blue; break;
-          case '?': leds[i+1] = CRGB::Brown; break;
-          default: leds[i+1] = CRGB::Black; break;
+          case 'R': couleurVentouse(i, CRGB::Red); break;
+          case 'G': couleurVentouse(i, CRGB::Green); break;
+          case 'B': couleurVentouse(i, CRGB::Blue); break;
+          case '?': couleurVentouse(i, CRGB::Yellow); break;
+          default: couleurVentouse(i, CRGB::Black); break;
         }
       }
-      Wire.write(0);
+      if (wire) {
+        Wire.write(0);
+      } else {
+        Serial.println("V: OK");
+      }
       break;
   }
 }
-
-#if defined(DEBUG)
-void printCarreFouilleDebug(CarreFouille carreFouille) {
-  Serial.print("Carre de fouille : 0x"); 
-  Serial.println(carreFouille, HEX); 
-}
-#endif
 
 #if defined(SCREEN)
 void printCarreFouilleScreen(int value, String name) {
@@ -214,28 +254,28 @@ void readCarreFouille() {
       printCarreFouilleScreen(analogValue, "VIOLET");
 #endif
       carreFouille = VIOLET;
-      leds[0] = CRGB::Purple;
+      couleurCarreFouille(CRGB::Purple);
     
     } else if (between(analogValue, 511)) {
 #if defined(SCREEN)       
       printCarreFouilleScreen(analogValue, "JAUNE");
 #endif     
       carreFouille = JAUNE;
-      leds[0] = CRGB::Yellow;
+      couleurCarreFouille(CRGB::Yellow);
     
     } else if (between(analogValue, 843)) {
 #if defined(SCREEN)     
       printCarreFouilleScreen(analogValue, "INTERDIT");
 #endif
       carreFouille = INTERDIT;
-      leds[0] = CRGB::Red;
+      couleurCarreFouille(CRGB::Red);
     
     } else {
 #if defined(SCREEN)       
       printCarreFouilleScreen(analogValue, "INCONNU");
 #endif
       carreFouille = INCONNU;
-      leds[0] = CRGB::White;
+      couleurCarreFouille(CRGB::White);
     }
   
   } else {
@@ -243,8 +283,30 @@ void readCarreFouille() {
     printCarreFouilleScreen(analogValue, "EN L'AIR");
 #endif
     carreFouille = EN_L_AIR;
-    leds[0] = CRGB::Black;
+    couleurCarreFouille(CRGB::Black);
   }
+}
+
+void couleurCarreFouille(CRGB couleur) {
+  ledsBandeau1[0] = couleur;
+}
+
+void couleurVentouse(uint8_t index, CRGB couleur) {
+#if NB_BANDEAU_LED == 1
+  ledsBandeau1[index + NUM_LEDS_FOUILLE] = couleur;
+#else
+  ledsBandeau2[index] = couleur;
+#endif
+}
+
+void couleurStock(uint8_t index, CRGB couleur) {
+#if NB_BANDEAU_LED == 1
+  ledsBandeau1[index + NUM_LEDS_FOUILLE + NUM_LEDS_VENTOUSE] = couleur;
+#elif NB_BANDEAU_LED == 2
+  ledsBandeau2[index + NUM_LEDS_VENTOUSE] = couleur;
+#else
+  ledsBandeau3[index] = couleur;
+#endif
 }
 
 boolean between(int value, int medium) {
