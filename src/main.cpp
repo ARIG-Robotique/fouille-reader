@@ -9,8 +9,6 @@
 #include <FastLED.h>
 #include <Wire.h>
 
-#define NUM_LEDS 1
-
 #if defined(SCREEN)
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
@@ -32,14 +30,10 @@ enum CarreFouille : byte {
 // ----------------- //
 int i2cAddress = 0x3C;
 
-int lastAnalogValue = 0;
-int analogValue = 0;
-int cpt = 0;
-
 volatile CarreFouille carreFouille = EN_L_AIR;
 
-uint8_t brightness = 250;
-CRGB leds[NUM_LEDS];
+CRGB leds[3];
+CRGB ledsStock[6];
 
 // Prototypes for functions defined at the end of this file //
 // -------------------------------------------------------- //
@@ -49,7 +43,8 @@ void printCarreFouilleDebug(CarreFouille carreFouille);
 #if defined(SCREEN) 
 void printCarreFouilleScreen(int value, String name);
 #endif
-void i2cRequest();
+void i2cRequest(int length);
+void readCarreFouille();
 boolean between(int value, int medium);
 
 // Configuration //
@@ -90,7 +85,7 @@ void setup()
 
   
   Wire.begin(i2cAddress);
-  Wire.onRequest(i2cRequest);
+  Wire.onReceive(i2cRequest);
 #if defined(DEBUG)
   Serial.print(" - I2C [OK] (Addresse : ");
   Serial.print(i2cAddress, HEX);
@@ -100,15 +95,109 @@ void setup()
 #if defined(DEBUG)
   Serial.println(" - Configuration bandeau LEDs");
 #endif
-  FastLED.addLeds<NEOPIXEL, 6>(leds, NUM_LEDS);
-  FastLED.setBrightness(brightness);
-
+  FastLED.addLeds<NEOPIXEL, 6>(leds, 3);
+  FastLED.addLeds<NEOPIXEL, 5>(ledsStock, 6); // FIXME pin
 }
 
 // Main loop //
 // --------- //
 void loop() {
-  analogValue = analogRead(A0);
+  EVERY_N_MILLIS(2) {
+    readCarreFouille();
+  }
+
+  EVERY_N_SECONDS(1) {
+    digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN) == LOW ? HIGH : LOW);
+
+#if defined(DEBUG)
+    Serial.print("Value : "); Serial.print(analogValue, DEC); 
+    Serial.print("\tDiff  : "); Serial.println(diff, DEC);
+    printCarreFouilleDebug(carreFouille);
+#endif
+  }
+
+  FastLED.show();
+}
+
+void i2cRequest(int length) {
+  char c = Wire.read();
+
+  switch (c) {
+    // demande de valeur du carré de fouille
+    case 'F':
+      Wire.write(carreFouille);
+      break;
+
+    // changement de couleur du stock
+    case 'S':
+      if (length < 7) {
+        #if defined(DEBUG)
+        Serial.print("Pas assez de bits reçus pour le stock");
+        #endif
+        break;
+      }
+      for (uint8_t i = 0; i < 6; i++) {
+        c = Wire.read();
+        switch (c) {
+          case 'R': ledsStock[i] = CRGB::Red; break;
+          case 'G': ledsStock[i] = CRGB::Green; break;
+          case 'B': ledsStock[i] = CRGB::Blue; break;
+          case '?': ledsStock[i] = CRGB::Brown; break;
+          default: ledsStock[i] = CRGB::Black; break;
+        }
+      }
+      Wire.write(0);
+      break;
+
+    // changement de couleur des ventouse
+    case 'V':
+      if (length < 3) {
+        #if defined(DEBUG)
+        Serial.print("Pas assez de bits reçus pour les ventouses");
+        #endif
+        break;
+      }
+      for (uint8_t i = 0; i < 2; i++) {
+        c = Wire.read();
+        switch (c) {
+          case 'R': leds[i+1] = CRGB::Red; break;
+          case 'G': leds[i+1] = CRGB::Green; break;
+          case 'B': leds[i+1] = CRGB::Blue; break;
+          case '?': leds[i+1] = CRGB::Brown; break;
+          default: leds[i+1] = CRGB::Black; break;
+        }
+      }
+      Wire.write(0);
+      break;
+  }
+}
+
+#if defined(DEBUG)
+void printCarreFouilleDebug(CarreFouille carreFouille) {
+  Serial.print("Carre de fouille : 0x"); 
+  Serial.println(carreFouille, HEX); 
+}
+#endif
+
+#if defined(SCREEN)
+void printCarreFouilleScreen(int value, String name) {
+  display.clearDisplay();
+
+  display.setTextSize(2);             // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
+  display.println(name);
+  display.println(value, DEC);
+
+  display.display();
+}
+#endif
+
+void readCarreFouille() {
+  static int lastAnalogValue;
+  static int cpt;
+
+  int analogValue = analogRead(A0);
   int diff = abs(analogValue - lastAnalogValue);
 
   if (diff < 5) {
@@ -146,7 +235,7 @@ void loop() {
       printCarreFouilleScreen(analogValue, "INCONNU");
 #endif
       carreFouille = INCONNU;
-      leds[0] = CRGB::Blue;
+      leds[0] = CRGB::White;
     }
   
   } else {
@@ -154,47 +243,9 @@ void loop() {
     printCarreFouilleScreen(analogValue, "EN L'AIR");
 #endif
     carreFouille = EN_L_AIR;
-    leds[0] = CRGB::Blue;
-  }
-
-  FastLED.show();
-  FastLED.delay(2);
-
-  EVERY_N_SECONDS(1) {
-    digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN) == LOW ? HIGH : LOW);
-
-#if defined(DEBUG)
-    Serial.print("Value : "); Serial.print(analogValue, DEC); 
-    Serial.print("\tDiff  : "); Serial.println(diff, DEC);
-    printCarreFouilleDebug(carreFouille);
-#endif
+    leds[0] = CRGB::Black;
   }
 }
-
-void i2cRequest() {
-  Wire.write(carreFouille);
-}
-
-#if defined(DEBUG)
-void printCarreFouilleDebug(CarreFouille carreFouille) {
-  Serial.print("Carre de fouille : 0x"); 
-  Serial.println(carreFouille, HEX); 
-}
-#endif
-
-#if defined(SCREEN)
-void printCarreFouilleScreen(int value, String name) {
-  display.clearDisplay();
-
-  display.setTextSize(2);             // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);        // Draw white text
-  display.setCursor(0,0);             // Start at top-left corner
-  display.println(name);
-  display.println(value, DEC);
-
-  display.display();
-}
-#endif
 
 boolean between(int value, int medium) {
   return (value >= medium - 10 && value <= medium + 10);
