@@ -1,13 +1,20 @@
 # fouille-reader
 
-Microprogramme Arduino pour la lecture des carrés de fouille Age of Bots et le pilotage de LEDs.
+Microprogramme Arduino pour la lecture des carrés de fouille Age of Bots et le pilotage de LEDs pour la visualisation du stock du robot.
+
+La carte utilisé est l'interface Nano générique de 2022.
 
 ## Communication I2C
 
 ### Lecture d'un carré de fouille
 
 - requête : `F`
-- réponse : 0-5 (en l'air, inconnu, jaune, violet, interdit)
+- réponse : 0-4 
+    - 0 : en l'air
+    - 1 : inconnu
+    - 2 : jaune
+    - 3 : violet
+    - 4 : interdit
 
 ### Changement de couleur du stock
 
