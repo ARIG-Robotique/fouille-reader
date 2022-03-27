@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 #if defined(SCREEN)
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+  #include <Adafruit_GFX.h>
+  #include <Adafruit_SSD1306.h>
 #endif
 #include <FastLED.h>
 #include <Wire.h>
@@ -20,7 +20,7 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #endif
 
-enum CarreFouille {
+enum CarreFouille : byte {
   EN_L_AIR,
   INCONNU,
   JAUNE,
@@ -30,14 +30,21 @@ enum CarreFouille {
 
 // Private variables //
 // ----------------- //
+int i2cAddress = 0x3C;
+
 int lastAnalogValue = 0;
 int analogValue = 0;
 int cpt = 0;
+
 volatile CarreFouille carreFouille = EN_L_AIR;
+
 CRGB leds[NUM_LEDS];
 
 // Prototypes for functions defined at the end of this file //
 // -------------------------------------------------------- //
+#if defined(DEBUG)
+void printCarreFouilleDebug(CarreFouille carreFouille);
+#endif
 #if defined(SCREEN) 
 void printCarreFouilleScreen(int value, String name);
 #endif
@@ -48,9 +55,11 @@ boolean between(int value, int medium);
 // ------------- //
 void setup()
 {
-#ifdef DEBUG
+#if defined(DEBUG)
   Serial.begin(115200);
   Serial.println("Setup");
+
+  Serial.println(" - Configuration des I/O");
 #endif
 
   analogReference(EXTERNAL);
@@ -58,6 +67,9 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
 
 #if defined(SCREEN)
+  #if defined(DEBUG)
+    Serial.println(" - Configuration Ecran OLED");
+  #endif
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
   #if defined(DEBUG)
@@ -76,7 +88,7 @@ void setup()
 #endif
 
   
-  Wire.begin(0xC0);
+  Wire.begin(i2cAddress);
   Wire.onRequest(i2cRequest);
 #if defined(DEBUG)
   Serial.print(" - I2C [OK] (Addresse : ");
@@ -91,10 +103,6 @@ void setup()
 void loop() {
   analogValue = analogRead(A0);
   int diff = abs(analogValue - lastAnalogValue);
-#if defined(DEBUG)
-  Serial.print("Value : "); Serial.print(analogValue, DEC); 
-  Serial.print("\tDiff  : "); Serial.println(diff, DEC);
-#endif
 
   if (diff < 5) {
     cpt++;
@@ -147,12 +155,25 @@ void loop() {
 
   EVERY_N_SECONDS(1) {
     digitalWrite(LED_BUILTIN, digitalRead(LED_BUILTIN) == LOW ? HIGH : LOW);
+
+#if defined(DEBUG)
+    Serial.print("Value : "); Serial.print(analogValue, DEC); 
+    Serial.print("\tDiff  : "); Serial.println(diff, DEC);
+    printCarreFouilleDebug(carreFouille);
+#endif
   }
 }
 
 void i2cRequest() {
   Wire.write(carreFouille);
 }
+
+#if defined(DEBUG)
+void printCarreFouilleDebug(CarreFouille carreFouille) {
+  Serial.print("Carre de fouille : 0x"); 
+  Serial.println(carreFouille, HEX); 
+}
+#endif
 
 #if defined(SCREEN)
 void printCarreFouilleScreen(int value, String name) {
