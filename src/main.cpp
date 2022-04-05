@@ -29,7 +29,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE + NUM_LEDS_VENTOUSE + NUM_LEDS_STOCK)
 #elif NB_BANDEAU_LED == 2
 #define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE)
-#define NUM_LEDS_BANDEAU_2 (NUM_LEDS_VENTOUSE + NUM_LEDS_STOCK)
+#define NUM_LEDS_BANDEAU_2 (NUM_LEDS_STOCK + NUM_LEDS_VENTOUSE)
 #elif NB_BANDEAU_LED == 3
 #define NUM_LEDS_BANDEAU_1 (NUM_LEDS_FOUILLE)
 #define NUM_LEDS_BANDEAU_2 (NUM_LEDS_VENTOUSE)
@@ -293,19 +293,19 @@ void couleurCarreFouille(CRGB couleur) {
 
 void couleurVentouse(uint8_t index, CRGB couleur) {
 #if NB_BANDEAU_LED == 1
-  ledsBandeau1[index + NUM_LEDS_FOUILLE] = couleur;
+  ledsBandeau1[index + NUM_LEDS_FOUILLE + NUM_LEDS_STOCK] = couleur;
+#elif NB_BANDEAU_LED == 2
+  ledsBandeau2[index + NUM_LEDS_STOCK] = couleur;
 #else
-  ledsBandeau2[index] = couleur;
+  ledsBandeau3[index] = couleur;
 #endif
 }
 
 void couleurStock(uint8_t index, CRGB couleur) {
 #if NB_BANDEAU_LED == 1
-  ledsBandeau1[index + NUM_LEDS_FOUILLE + NUM_LEDS_VENTOUSE] = couleur;
-#elif NB_BANDEAU_LED == 2
-  ledsBandeau2[index + NUM_LEDS_VENTOUSE] = couleur;
+  ledsBandeau1[index + NUM_LEDS_FOUILLE] = couleur;
 #else
-  ledsBandeau3[index] = couleur;
+  ledsBandeau2[index] = couleur;
 #endif
 }
 
