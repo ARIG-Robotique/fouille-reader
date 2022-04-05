@@ -275,7 +275,7 @@ void readCarreFouille() {
       printCarreFouilleScreen(analogValue, "INCONNU");
 #endif
       carreFouille = INCONNU;
-      couleurCarreFouille(CRGB::White);
+      couleurCarreFouille(CRGB::Black);
     }
   
   } else {
