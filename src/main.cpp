@@ -112,6 +112,7 @@ void setup()
   
   Wire.begin(i2cAddress);
   Wire.onReceive(i2cOnReceive);
+  Wire.onRequest(i2cOnRequest);
 #if defined(DEBUG)
   Serial.print(" - I2C [OK] (Addresse : ");
   Serial.print(i2cAddress, HEX);
@@ -150,6 +151,10 @@ void loop() {
   FastLED.show();
 }
 
+void i2cOnRequest() {
+  Wire.write(carreFouille);
+}
+
 void i2cOnReceive(int length) {
   processReceive(length, true);
 }
@@ -157,14 +162,10 @@ void i2cOnReceive(int length) {
 void processReceive(int length, boolean wire) {
   char c = wire ? Wire.read() : Serial.read();
   switch (c) {
-    // demande de valeur du carré de fouille
+    // demande de valeur du carré de fouille (only Serial)
     case 'F':
-      if (wire) {
-        Wire.write(carreFouille);
-      } else {
-        Serial.print("F: 0x0");
-        Serial.println(carreFouille, HEX);
-      }
+      Serial.print("F: 0x0");
+      Serial.println(carreFouille, HEX);
       break;
 
     // changement de couleur du stock
@@ -185,9 +186,7 @@ void processReceive(int length, boolean wire) {
           default: couleurStock(i, CRGB::Black); break;
         }
       }
-      if (wire) {
-        Wire.write(0);
-      } else {
+      if (!wire) {
         Serial.println("S: OK");
       }
       break;
@@ -210,9 +209,7 @@ void processReceive(int length, boolean wire) {
           default: couleurVentouse(i, CRGB::Black); break;
         }
       }
-      if (wire) {
-        Wire.write(0);
-      } else {
+      if (!wire) {
         Serial.println("V: OK");
       }
       break;
