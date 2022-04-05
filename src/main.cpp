@@ -45,7 +45,6 @@ CRGB ledsBandeau3[NUM_LEDS_BANDEAU_3];
 #endif
 
 enum CarreFouille : byte {
-  EN_L_AIR,
   INCONNU,
   JAUNE,
   VIOLET,
@@ -56,7 +55,7 @@ enum CarreFouille : byte {
 // ----------------- //
 int i2cAddress = 0x3C;
 
-volatile CarreFouille carreFouille = EN_L_AIR;
+volatile CarreFouille carreFouille = INCONNU;
 
 // Prototypes for functions defined at the end of this file //
 // -------------------------------------------------------- //
@@ -64,6 +63,7 @@ volatile CarreFouille carreFouille = EN_L_AIR;
 void printStatesScreen(int value, String name);
 #endif
 void i2cOnReceive(int length);
+void i2cOnRequest();
 void processReceive(int length, boolean wire);
 
 void readCarreFouille();
@@ -280,9 +280,9 @@ void readCarreFouille() {
   
   } else {
 #if defined(SCREEN) 
-    printCarreFouilleScreen(analogValue, "EN L'AIR");
+    printCarreFouilleScreen(analogValue, "INCONNU");
 #endif
-    carreFouille = EN_L_AIR;
+    carreFouille = INCONNU;
     couleurCarreFouille(CRGB::Black);
   }
 }
